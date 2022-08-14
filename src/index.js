@@ -2,6 +2,7 @@ const fs = require("fs-extra");
 
 const path = require("path");
 const FullPath = require("fullpath");
+const difference = require("loadsh/difference");
 function getAllFiles(dir) {
   const fullPaths = new FullPath.Search({
     path: "/src",
@@ -11,7 +12,8 @@ function getAllFiles(dir) {
   });
   return fullPaths;
 }
-
+// replace // => /
+const replacePath = _path => _path.replaceAll("\\", "/")
 class BasePlugin {
   constructor() {}
 
@@ -24,34 +26,30 @@ class BasePlugin {
       console.log("entrys", entrys);
       // const entrysOnePath = path.join(entrys[0].context + entrys[0]._identifier.replace('multi .', ''));
       const entrysOnePath = path.join(entrys[0].context);
+      //output data
+      const res = {};
+      const allFiles = getAllFiles(entrysOnePath).map(replacePath);
+      res.allFiles = allFiles;
 
-      const allFiles = getAllFiles(entrysOnePath, {
-        isDeep: true,
-        prefix: true,
-      });
-      console.log("allFiles", allFiles);
-      fs.outputFileSync(
-        "allFiles.txt",
-        Array.from(allFiles)
-          // .map((file) => {
-          //   console.log("file", file);
-          //   return path.resolve(__dirname, file.name + "." + file.subffix);
-          // })
-          .join("\n")
-      );
+      fs.outputFileSync("allFiles.txt", Array.from(allFiles).join("\n"));
 
-      const fileDeps = Array.from(compilation.fileDependencies).filter(
-        (path) => {
+      const fileDeps = Array.from(compilation.fileDependencies)
+        .filter((path) => {
           console.log("path", path);
-          return path.includes("src") &&  !path.includes("node_modules") ;
-        }
-      );
-      console.log('fileDeps', fileDeps);
-      fs.outputFileSync(
-        "fileDeps.txt",
-        fileDeps.join("\n"),
-        "utf-8"
-      );
+          return path.includes("src") && !path.includes("node_modules");
+        })
+        .map(replacePath);
+      res.fileDeps = fileDeps;
+        // diff + UNIQUE
+      const needDelete = [
+        ...new Set([
+          ...difference(allFiles, fileDeps),
+          ...difference(fileDeps, allFiles),
+        ]),
+      ];
+      res.needDelete = needDelete;
+
+      fs.outputFileSync("fileDeps.txt", fileDeps.join("\n"), "utf-8");
       fs.outputFileSync(
         "contextDeps.txt",
         Array.from(compilation.contextDependencies)
@@ -59,6 +57,8 @@ class BasePlugin {
           .join("\n"),
         "utf-8"
       );
+
+      fs.outputJsonSync("data.json", res, "utf-8");
 
       callback();
     });
